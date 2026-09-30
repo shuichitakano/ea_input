@@ -26,6 +26,8 @@ Extracted from arcade_play commit `5efa8ed`, with the ongoing EasyArcade3 change
 shared default mapping, neutral absent HID axes, configurable descriptor field
 limits and bounded array usage expansion. Original notices and MIT license retained.
 
-This is initially a local Git repository. Products pin its commit with submodules.
-Before sharing products to other machines, agree on a remote and update both
-.gitmodules URLs. No remote publication has been performed.
+Repository: https://github.com/shuichitakano/ea_input
+
+Products pin a commit through `external/ea_input` Git submodules. Initialize with
+`git submodule update --init --recursive`. Updating the library requires committing
+the chosen submodule revision in each product repository.
