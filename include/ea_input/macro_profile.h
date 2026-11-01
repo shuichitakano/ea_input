@@ -104,6 +104,9 @@ public:
     void attach(const Profile *profile);
     void reset();
     uint8_t currentSet() const { return currentSet_; }
+    // Most recently started sequence contributing to the last processed frame.
+    // Same-frame ties use the lowest binding index. Borrowed from the attached profile.
+    const Sequence *currentSequence() const;
     void setCurrentSet(uint8_t set);
     void changeSet(int delta);
 

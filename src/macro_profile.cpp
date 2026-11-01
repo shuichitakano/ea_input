@@ -759,6 +759,20 @@ void PlayerRuntime::reset()
     }
 }
 
+const Sequence *PlayerRuntime::currentSequence() const
+{
+    if (!profile_ || activeScratch_.empty())
+        return nullptr;
+    // This existing list describes the output frame, including a sequence's
+    // final frame, before advancePlayback updates the state for the next one.
+    size_t latest = activeScratch_.front();
+    for (const size_t index : activeScratch_)
+        if (playbacks_[index].startOrder > playbacks_[latest].startOrder ||
+            (playbacks_[index].startOrder == playbacks_[latest].startOrder && index < latest))
+            latest = index;
+    return profile_->findSequence(profile_->bindings[latest].sequenceId);
+}
+
 void PlayerRuntime::setCurrentSet(uint8_t set)
 {
     if (profile_ && set < profile_->setCount)
