@@ -291,18 +291,114 @@ void runtimeModeTests()
     player.attach(&profile);
     assert(player.processFrame(0, 0, 0) == 0);
     assert(player.processFrame(1u << 6, 0, 1) == (1u << 6));
-    assert(player.processFrame(1u << 6, 0, 2) == (1u << 6));
-    assert(player.processFrame(1u << 6, 0, 3) == 0);
+    assert(player.processFrame(1u << 6, 0, 2) == 0);
+    assert(player.processFrame(1u << 6, 0, 3) == (1u << 6));
     assert(player.processFrame(0, 0, 4) == 0);
     assert(player.processFrame(1u << 6, 0, 5) == (1u << 6)); // re-press resets to ON
 
     assert(RapidTiming::globalPhaseOn(0, 2, false));
-    assert(RapidTiming::globalPhaseOn(1, 2, false));
-    assert(!RapidTiming::globalPhaseOn(2, 2, false));
-    assert(RapidTiming::globalPhaseOn(2, 2, true));
+    assert(!RapidTiming::globalPhaseOn(1, 2, false));
+    assert(RapidTiming::globalPhaseOn(2, 2, false));
+    assert(!RapidTiming::globalPhaseOn(2, 2, true));
     assert(RapidTiming::synchronizedOn(7, 7, 2));
-    assert(RapidTiming::synchronizedOn(8, 7, 2));
-    assert(!RapidTiming::synchronizedOn(9, 7, 2));
+    assert(!RapidTiming::synchronizedOn(8, 7, 2));
+    assert(RapidTiming::synchronizedOn(9, 7, 2));
+}
+
+void rapidPeriodTests()
+{
+    // Exercise the actual runtime for every supported period and phase.
+    // Count rising edges over 60 cycles: a doubled period produces only 30.
+    for (uint8_t period = 2; period <= 60; ++period)
+        for (uint8_t type = 1; type <= 3; ++type)
+        {
+            Macro::Profile profile;
+            profile.setCount = 1;
+            profile.frameStep = 1;
+            profile.mappings[6] = 1u << 6;
+            profile.rapidFire[6] = {true, type, period};
+            Macro::PlayerRuntime player;
+            player.attach(&profile);
+            const uint32_t start = 7;
+            player.processFrame(0, 0, start - 1);
+            unsigned edges = 0;
+            bool previous = false;
+            for (uint32_t offset = 0; offset < 61u * period; ++offset)
+            {
+                const uint32_t frame = start + offset;
+                const bool on = player.processFrame(1u << 6, 0, frame) != 0;
+                const uint32_t phase = (type == 1 ? offset : frame) % period;
+                const bool front = phase < (period + 1u) / 2;
+                assert(on == (type == 3 ? !front : front));
+                if (offset >= period && on && !previous)
+                    ++edges;
+                previous = on;
+            }
+            assert(edges == 60);
+        }
+
+    // Legacy divisors still represent ON and OFF durations separately.
+    for (int divisor = 1; divisor <= 4; ++divisor)
+        for (uint32_t elapsed = 0; elapsed < 32; ++elapsed)
+            assert(RapidTiming::synchronizedOn(7 + elapsed, 7, 2 * divisor) ==
+                   ((elapsed / divisor) % 2 == 0));
+
+    // Synchronized elapsed time also works across the frame counter wrap.
+    assert(RapidTiming::synchronizedOn(0, UINT32_MAX, 3));
+    assert(!RapidTiming::synchronizedOn(1, UINT32_MAX, 3));
+    assert(RapidTiming::synchronizedOn(2, UINT32_MAX, 3));
+}
+
+void synchronizedStopTests()
+{
+    for (uint8_t scale : {1, 3, 255})
+        for (uint16_t ticks : {1, 4})
+        {
+            Macro::Profile profile;
+            profile.setCount = 1;
+            profile.frameStep = scale;
+            profile.sequences = {{0, 0, {{4, ticks}}, "Sync"}};
+            profile.bindings = {{6, 0, 0, 0x11}};
+            const uint32_t period = scale * ticks;
+            // Release both at and inside a cycle, including tick zero of
+            // multi-frame ticks. Playback must finish exactly that cycle.
+            for (uint32_t release : {1u, period, period + 1})
+            {
+                Macro::PlayerRuntime player;
+                player.attach(&profile);
+                const uint32_t stop = ((release + period - 1) / period) * period;
+                for (uint32_t frame = 0; frame <= stop + period; ++frame)
+                    assert(player.processFrame(frame < release ? 64 : 0, 0, frame) ==
+                           (frame < stop ? 4u : 0u));
+                // Re-press starts playback again after a completed stop.
+                assert(player.processFrame(64, 0, stop + period + 1) == 4);
+            }
+        }
+
+    Macro::Profile profile;
+    profile.setCount = 1;
+    profile.frameStep = 1;
+    profile.sequences = {{0, 0, {{4, 1}, {8, 3}}, "Sync"}};
+    profile.bindings = {{6, 0, 0, 0x11}};
+    for (uint32_t next : {5u, 7u, 11u})
+    {
+        Macro::PlayerRuntime player;
+        player.attach(&profile);
+        assert(player.processFrame(64, 0, 2) == 8);
+        assert(player.processFrame(0, 0, 3) == 8);
+        assert(player.processFrame(0, 0, next) == 0);
+    }
+    Macro::PlayerRuntime player;
+    player.attach(&profile);
+    assert(player.processFrame(64, 0, UINT32_MAX - 1) == 8);
+    assert(player.processFrame(0, 0, UINT32_MAX) == 8);
+    assert(player.processFrame(0, 0, 0) == 0);
+
+    // A held input must continue playing through missed frames.
+    player.attach(&profile);
+    assert(player.processFrame(64, 0, 2) == 8);
+    assert(player.processFrame(64, 0, 9) == 8);
+    assert(player.processFrame(64, 0, 12) == 4);
 }
 
 void v11RuntimeTests()
@@ -367,6 +463,8 @@ int main(int argc, char **argv)
     parserTests();
     runtimeTests();
     runtimeModeTests();
+    rapidPeriodTests();
+    synchronizedStopTests();
     v11RuntimeTests();
     if (argc > 1)
     {

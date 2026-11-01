@@ -5,14 +5,17 @@
 
 namespace RapidTiming
 {
-inline bool globalPhaseOn(uint32_t frame, int divisor, bool back)
+// period is a complete ON/OFF cycle in frames. For odd periods, the
+// front phase has the extra ON frame; the back phase is its complement.
+inline bool globalPhaseOn(uint32_t frame, int period, bool back)
 {
-    const bool backPhase = (frame / std::max(1, divisor)) & 1u;
-    return back ? backPhase : !backPhase;
+    const auto frames = static_cast<uint32_t>(std::max(2, period));
+    const bool frontOn = frame % frames < (frames + 1) / 2;
+    return back ? !frontOn : frontOn;
 }
 
-inline bool synchronizedOn(uint32_t frame, uint32_t startFrame, int divisor)
+inline bool synchronizedOn(uint32_t frame, uint32_t startFrame, int period)
 {
-    return (((frame - startFrame) / std::max(1, divisor)) & 1u) == 0;
+    return globalPhaseOn(frame - startFrame, period, false);
 }
 }

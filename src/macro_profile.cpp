@@ -811,6 +811,7 @@ void PlayerRuntime::startPlayback(size_t bindingIndex, uint32_t frameCounter)
     playback.active = true;
     playback.releasePending = false;
     playback.startOrder = currentFrameOrder_;
+    playback.syncFrame = frameCounter;
     playback.step = 0;
     playback.ticksLeft = sequence->steps[0].ticks;
     playback.framesLeft = profile_->frameStep;
@@ -831,12 +832,20 @@ void PlayerRuntime::updateSynchronizedPlayback(size_t bindingIndex, uint32_t fra
     for (const auto &step : sequence->steps)
         totalTicks += step.ticks;
     const uint32_t playTick = (frameCounter / profile_->frameStep) % totalTicks;
-    if (playback.releasePending && playTick == 0 && playback.syncTick != 0)
+    const uint32_t cycleFrames = totalTicks * profile_->frameStep;
+    // Detect crossing a cycle boundary, even for a one-tick sequence or
+    // when the caller misses the first frame of the next cycle. Counter
+    // wrap also restarts the global phase and therefore ends the old cycle.
+    // Only calculate cycle indices once release is pending; held playback
+    // needs no additional divisions for the stop check.
+    if (playback.releasePending &&
+        (frameCounter < playback.syncFrame ||
+         frameCounter / cycleFrames != playback.syncFrame / cycleFrames))
     {
         playback = {};
         return;
     }
-    playback.syncTick = playTick;
+    playback.syncFrame = frameCounter;
     uint32_t tick = playTick;
     for (size_t i = 0; i < sequence->steps.size(); ++i)
     {

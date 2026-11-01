@@ -110,7 +110,9 @@ uint32_t PadState::getButtons() const
         {
             if (b & rapidFireSyncMask_)
             {
-                const bool syncOn = RapidTiming::synchronizedOn(vsyncCount_, rapidSyncStart_[i], divisor);
+                // Legacy settings divide the base toggle rate, unlike macro
+                // profiles whose divisor is the complete cycle in frames.
+                const bool syncOn = RapidTiming::synchronizedOn(vsyncCount_, rapidSyncStart_[i], divisor * 2);
                 if (syncOn)
                     r |= b;
             }

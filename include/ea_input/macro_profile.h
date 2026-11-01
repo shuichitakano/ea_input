@@ -32,7 +32,7 @@ struct RapidFire
 {
     bool override = false;
     uint8_t type = 0;
-    uint8_t divisor = 2;
+    uint8_t divisor = 2; // Complete ON/OFF cycle in VSync frames.
 };
 
 struct Step
@@ -125,7 +125,7 @@ private:
         uint32_t output = 0;
         uint32_t suppression = 0;
         uint64_t startOrder = 0;
-        uint32_t syncTick = 0;
+        uint32_t syncFrame = 0;
         bool releasePending = false;
     };
     struct SelectorState
